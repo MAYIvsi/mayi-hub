@@ -1,20 +1,35 @@
+"use client";
+
 import { cn } from "@/lib/cn";
 import type { ChatMessage } from "@/types/chat";
+import { Modal } from "@/components/ui/Modal";
+import { X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import { useMemo, useState } from "react";
 
 type BubbleRole = "user" | "meizi";
 
 export function MessageBubble({
   role,
   content,
+  images,
   timestamp,
 }: {
   role: BubbleRole;
   content: string;
+  images?: { url: string; filename?: string; mediaType?: string }[];
   timestamp?: string;
 }) {
   const isUser = role === "user";
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const hasImages = Boolean(images && images.length > 0);
+  const previewTitle = useMemo(() => {
+    if (!previewUrl) return "图片预览";
+    const match = (images ?? []).find((i) => i.url === previewUrl);
+    return match?.filename ?? "图片预览";
+  }, [images, previewUrl]);
 
   return (
     <div
@@ -54,11 +69,64 @@ export function MessageBubble({
               </ReactMarkdown>
             </div>
           )}
+
+          {hasImages ? (
+            <div
+              className={cn(
+                "mt-3 grid gap-2",
+                images!.length > 1 ? "grid-cols-2" : "grid-cols-1",
+              )}
+            >
+              {images!.map((img) => (
+                <button
+                  key={img.url}
+                  type="button"
+                  className={cn(
+                    "group relative overflow-hidden rounded-xl border border-white/10",
+                    isUser ? "hover:border-border-green" : "hover:border-border-pink",
+                  )}
+                  onClick={() => setPreviewUrl(img.url)}
+                  aria-label={img.filename ? `预览 ${img.filename}` : "预览图片"}
+                >
+                  <img
+                    src={img.url}
+                    alt={img.filename ?? "image"}
+                    className="max-h-64 w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         {timestamp ? (
           <div className="text-xs text-text-muted">{timestamp}</div>
         ) : null}
       </div>
+
+      <Modal
+        open={Boolean(previewUrl)}
+        onClose={() => setPreviewUrl(null)}
+        title={previewTitle}
+        panelClassName="max-w-3xl"
+      >
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setPreviewUrl(null)}
+            aria-label="close"
+            className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-bg-app/40 text-text-muted transition-colors hover:text-text-primary hover:border-border-pink hover:shadow-glow-pink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={previewTitle}
+              className="max-h-[70vh] w-full rounded-xl border border-white/10 object-contain"
+            />
+          ) : null}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -63,8 +63,17 @@ export function ChatClient() {
 
   const uiMessages = useMemo(() => {
     return messages.map((m) => {
-      const parts = (m as unknown as { parts?: Array<{ type: string; text?: string }> })
-        .parts;
+      const parts = (
+        m as unknown as {
+          parts?: Array<{
+            type: string;
+            text?: string;
+            url?: string;
+            mediaType?: string;
+            filename?: string;
+          }>;
+        }
+      ).parts;
       const content = Array.isArray(parts)
         ? parts
             .filter((p) => p.type === "text" && typeof p.text === "string")
@@ -72,10 +81,27 @@ export function ChatClient() {
             .join("")
         : "";
 
+      const images = Array.isArray(parts)
+        ? parts
+            .filter(
+              (p) =>
+                p.type === "file" &&
+                typeof p.url === "string" &&
+                typeof p.mediaType === "string" &&
+                p.mediaType.startsWith("image/"),
+            )
+            .map((p) => ({
+              url: String(p.url),
+              filename: typeof p.filename === "string" ? p.filename : undefined,
+              mediaType: String(p.mediaType),
+            }))
+        : [];
+
       return {
         id: m.id,
         role: m.role === "assistant" ? ("meizi" as const) : ("user" as const),
         content,
+        images,
       };
     });
   }, [messages]);
@@ -112,11 +138,13 @@ export function ChatClient() {
       <ChatComposer
         input={input}
         onInputChange={(v) => setInput(v)}
-        onSubmit={async () => {
-          const text = input.trim();
-          if (!text) return;
+        onSubmit={async ({ text, files }) => {
+          const trimmed = text.trim();
+          if (!trimmed && !files?.length) return;
           setInput("");
-          await sendMessage({ text });
+          await sendMessage(
+            files?.length ? { text: trimmed, files } : { text: trimmed },
+          );
         }}
         disabled={isLoading}
       />

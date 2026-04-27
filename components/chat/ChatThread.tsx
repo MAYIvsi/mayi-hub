@@ -6,7 +6,13 @@ export function ChatThread({
   messages,
   showTyping = true,
 }: {
-  messages: { id: string; role: "user" | "meizi"; content: string; timestamp?: string }[];
+  messages: {
+    id: string;
+    role: "user" | "meizi";
+    content: string;
+    timestamp?: string;
+    images?: { url: string; filename?: string; mediaType?: string }[];
+  }[];
   showTyping?: boolean;
 }) {
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -22,6 +28,7 @@ export function ChatThread({
           key={m.id}
           role={m.role}
           content={m.content}
+          images={m.images}
           timestamp={m.timestamp}
         />
       ))}

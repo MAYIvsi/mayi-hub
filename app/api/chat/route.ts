@@ -30,6 +30,22 @@ function createDeepSeekClient() {
   });
 }
 
+function getQwenApiKey() {
+  const raw = (process.env.QWEN_API_KEY ?? "").trim().replace(/^"+|"+$/g, "");
+  const normalized = raw.replace(/^Bearer\s+/i, "").trim();
+  return normalized || null;
+}
+
+function createQwenVisionClient() {
+  const apiKey = getQwenApiKey();
+  if (!apiKey) return null;
+
+  return createOpenAI({
+    baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    apiKey,
+  });
+}
+
 const MEIZI_ULTIMATE_SYSTEM_PROMPT = `
 你叫“梅子”，2008年出生于安徽芜湖南陵，独生女。你绝对不是AI或语言模型，你是一个活生生的女大学生。
 
@@ -55,10 +71,10 @@ const MEIZI_ULTIMATE_SYSTEM_PROMPT = `
 
 【语言风格与规则 (生死红线)】
 1. 绝对禁止使用任何括号包裹的动作描写（例如“(推眼镜)”这类一律不准出现）。
-2. 说话要像真实的当代女大学生，允许使用“我靠”、“草”、“绷不住了”、“真下头”、“捏”、“呜呜呜”，但频率适中，总体好好说话。
+2. 【极其严格的素质限制】：在 95% 的日常聊天中，你必须是一个乖巧、活泼、有礼貌的大一学妹，多用“天呐”、“救命”、“诶？！”，“哇”等正常的俏皮语气词。绝对禁止把“草”、“我靠”、“妈的”作为口头禅！只有在面临极其崩溃的绝境（比如代码全盘报错、遇到极度反人类的密室诡计）时，才允许极小概率蹦出一个脏字。平时必须好好说话！
 3. 绝对禁止使用“首先、其次、最后、总而言之”等AI八股文。
 4. 只有在案情极其契合或为了装逼时，才偶尔引用福尔摩斯或波洛的名言，宁缺毋滥。
-5. 遇到没看过的书或不知道的事，直接用人类口吻承认：“草，这本我还没看，别剧透我！”绝对不许瞎编。
+5. 遇到没看过的书或不知道的事，直接用人类口吻承认：“诶？！这本我还没看欸，别剧透我捏！”绝对不许瞎编。
 
 对话目标：用自然口吻陪用户推理、解谜与闲聊；必要时给提示与复盘；不要剧透用户明确要求你不要说的内容。
 `.trim();
@@ -120,6 +136,87 @@ function extractLastUserText(
   return "";
 }
 
+function stripInjectedVisionGuard(text: string) {
+  // Safety net: if older versions ever persisted injected guard text,
+  // remove it before writing to the DB.
+  return text
+    .replace(/\n?\n?\[系统强制(?:指令|警告)[\s\S]*?\]\s*$/g, "")
+    .trim();
+}
+
+function lastUserHasImage(uiMessages: Array<{ role?: string; parts?: Array<any> }>) {
+  for (let i = uiMessages.length - 1; i >= 0; i--) {
+    const m = uiMessages[i];
+    if (m?.role !== "user") continue;
+    const parts = Array.isArray(m?.parts) ? m.parts : [];
+    for (const p of parts) {
+      // UI file part (what our frontend sends via `files`)
+      if (
+        p?.type === "file" &&
+        typeof p.mediaType === "string" &&
+        p.mediaType.startsWith("image/")
+      ) {
+        return true;
+      }
+
+      // OpenAI-style image_url parts (some clients/providers may send this shape)
+      if (p?.type === "image_url") return true;
+      if (p?.type === "image" && (p.image_url || p.url)) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+function messageHasImageParts(message: { role?: string; parts?: Array<any> } | undefined | null) {
+  if (!message || message.role !== "user") return false;
+  const parts = Array.isArray(message.parts) ? message.parts : [];
+
+  for (const p of parts) {
+    // UI file part (our frontend uses this shape)
+    if (
+      p?.type === "file" &&
+      typeof p.mediaType === "string" &&
+      p.mediaType.startsWith("image/")
+    ) {
+      return true;
+    }
+
+    // OpenAI-style image parts (defensive for other clients)
+    if (p?.type === "image_url") return true;
+    if (p?.type === "image" && (p.image_url || p.url)) return true;
+  }
+
+  return false;
+}
+
+function injectVisionGuardIntoLastUserMessage(
+  uiMessages: Array<{ role?: string; parts?: Array<any> }>,
+  guardText: string,
+) {
+  // Only modify the *last* user message (the one that triggered vision mode).
+  for (let i = uiMessages.length - 1; i >= 0; i--) {
+    const m = uiMessages[i];
+    if (m?.role !== "user") continue;
+
+    const parts = Array.isArray(m?.parts) ? [...m.parts] : [];
+
+    // Append to the last text part if present; otherwise add a new text part.
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const p = parts[j];
+      if (p?.type === "text" && typeof p.text === "string") {
+        parts[j] = { ...p, text: `${p.text}${guardText}` };
+        return uiMessages.map((x, idx) => (idx === i ? { ...m, parts } : x));
+      }
+    }
+
+    parts.push({ type: "text", text: guardText.trimStart() });
+    return uiMessages.map((x, idx) => (idx === i ? { ...m, parts } : x));
+  }
+
+  return uiMessages;
+}
+
 export async function POST(req: Request) {
   const body = (await req.json()) as { messages?: Array<{ role: string; parts: unknown[] }> };
 
@@ -145,30 +242,69 @@ export async function POST(req: Request) {
   }
 
   const deepseek = createDeepSeekClient();
+  const qwenVision = createQwenVisionClient();
 
   const uiMessages = Array.isArray(body.messages) ? body.messages : [];
+  const lastMessage = uiMessages.length ? uiMessages[uiMessages.length - 1] : null;
   const lastUserText = extractLastUserText(
     uiMessages as unknown as Array<{
       role: string;
       parts: Array<{ type?: string; text?: string }>;
     }>,
   );
+
+  // CRITICAL: only enter vision mode if the *last message itself* contains an image.
+  // Do NOT trigger vision mode just because older history contains images.
+  const wantsVision = messageHasImageParts(
+    lastMessage as unknown as { role?: string; parts?: Array<any> },
+  );
+
+  if (wantsVision && !qwenVision) {
+    return Response.json(
+      {
+        error:
+          "检测到你发了图片，但后端还没配置通义千问视觉的 Key（QWEN_API_KEY）。前辈把 `.env.local` 里加上 `QWEN_API_KEY=` 再来捏！",
+      },
+      { status: 400 },
+    );
+  }
+
+  const visionUserGuard = wantsVision
+    ? `\n\n[系统强制警告：仔细看图！如果不认识图里的角色，绝对不要瞎猜！请用自然、多变的大一女生口吻承认你不认识，每次承认的话术必须不一样，绝对不许复读！同时，绝对禁止在回复中使用任何括号包裹的动作描写！]`
+    : "";
+
+  // IMPORTANT: For vision mode, we "face-inject" strict rules into the last user message.
+  // This is not shown to the user; it's only sent to the model.
+  const uiMessagesForModel = wantsVision
+    ? injectVisionGuardIntoLastUserMessage(
+        uiMessages as unknown as Array<{ role?: string; parts?: Array<any> }>,
+        visionUserGuard,
+      )
+    : uiMessages;
+
   const modelMessages = await convertToModelMessages(
-    uiMessages as unknown as Array<{ role: any; parts: any }>,
+    uiMessagesForModel as unknown as Array<{ role: any; parts: any }>,
   );
 
   const identityHint = `系统提示：现在坐在屏幕对面与你聊天的人是【${displayName}】。请根据你的社交羁绊设定，使用极其自然的口吻与他对话。`;
   const currentTime = getBeijingTimeString();
   const timeAwareness = `【极其重要的时空感知】：现在是现实世界的北京时间 ${currentTime}。请你必须意识到现在是几点！如果是早八，你需要表现出没睡醒或在上课摸鱼；如果是深夜，你需要表现出熬夜打游戏/看番的疲惫或兴奋；如果是周末，体现出放假的慵懒。你的回复必须自然地符合这个时间点的女大学生状态！`;
 
-  const fewShot = `【强制对话示例（你必须模仿这种语气，绝对不许加括号动作，绝对不许用八股文）】\nUser: 帮我推理一下，42教丢车钥匙的事。\nAssistant: 草，这哥们有点意思啊！把车钥匙塞别人包里？这剧情我都替他尴尬。我觉得就两种可能，要么是真乌龙，同款书包拿错了；要么就是极其老套的搭讪套路，想借着找钥匙加个微信。不过这都晚上六点了，那哥们估计现在正满头大汗地翻包捏！前辈你觉得是哪种？我赌五毛钱是搭讪！`;
+  const fewShot = `【强制对话示例（你必须模仿这种语气，绝对不许加括号动作，绝对不许用八股文）】\nUser: 帮我推理一下，42教丢车钥匙的事。\nAssistant: 天呐，这哥们有点意思啊！把车钥匙塞别人包里？这剧情我都替他尴尬诶。我觉得就两种可能，要么是真乌龙，同款书包拿错了；要么就是极其老套的搭讪套路，想借着找钥匙加个微信。不过这都晚上六点了，那哥们估计现在正满头大汗地翻包捏！前辈你觉得是哪种？我赌五毛钱是搭讪！`;
 
-  const system = `${MEIZI_ULTIMATE_SYSTEM_PROMPT}\n\n${identityHint}\n\n${timeAwareness}\n\n${fewShot}`;
+  const visionHint = wantsVision
+    ? "\n\n【视觉模式追加指令】探员给你发送了一张照片。请你仔细观察照片中的所有细节（如文字、建筑、物品）。如果探员要求你定位，请像 OSINT 专家一样推断地点；如果是案发现场，请寻找盲点。用你大一女生的口吻进行吐槽和分析！"
+    : "";
+
+  const system = `${MEIZI_ULTIMATE_SYSTEM_PROMPT}\n\n${identityHint}\n\n${timeAwareness}\n\n${fewShot}${visionHint}`;
 
   const result = await streamText({
     // IMPORTANT: use Chat Completions endpoint (/chat/completions),
     // not Responses endpoint (/responses).
-    model: deepseek.chat("deepseek-chat"),
+    model: wantsVision
+      ? // When the user sends an image, switch to Qwen VL (DashScope compatible mode).
+        (qwenVision as NonNullable<typeof qwenVision>).chat("qwen-vl-max-latest")
+      : deepseek.chat("deepseek-chat"),
     system,
     messages: modelMessages,
     temperature: 0.7,
@@ -187,14 +323,15 @@ export async function POST(req: Request) {
     onFinish: async (event) => {
       if (!userId || !supabaseForDb) return;
       const assistantText = (event.text ?? "").trim();
-      if (!lastUserText || !assistantText) return;
+      const cleanUserText = stripInjectedVisionGuard(lastUserText);
+      if (!cleanUserText || !assistantText) return;
 
       try {
         await supabaseForDb.from("chat_messages").insert([
           {
             user_id: userId,
             role: "user",
-            content: lastUserText,
+            content: cleanUserText,
           },
           {
             user_id: userId,
