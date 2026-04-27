@@ -104,16 +104,36 @@ function getBeijingTimeString(now = new Date()) {
   return `${weekday} ${phase} ${hh}:${minute}`;
 }
 
+function extractLastUserText(
+  uiMessages: Array<{ role: string; parts: Array<{ type?: string; text?: string }> }>,
+) {
+  for (let i = uiMessages.length - 1; i >= 0; i--) {
+    const m = uiMessages[i];
+    if (m?.role !== "user") continue;
+    const parts = Array.isArray(m.parts) ? m.parts : [];
+    const text = parts
+      .filter((p) => p?.type === "text" && typeof p.text === "string")
+      .map((p) => p.text)
+      .join("");
+    if (text.trim()) return text.trim();
+  }
+  return "";
+}
+
 export async function POST(req: Request) {
   const body = (await req.json()) as { messages?: Array<{ role: string; parts: unknown[] }> };
 
   // Supabase session + profile display_name (fallback-safe)
   let displayName = "神秘访客";
+  let userId: string | null = null;
+  let supabaseForDb: Awaited<ReturnType<typeof createClient>> | null = null;
   try {
     const supabase = await createClient();
+    supabaseForDb = supabase;
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData.session?.user ?? null;
     if (user) {
+      userId = user.id;
       const profile = await getMyProfile(supabase, user.id);
       displayName =
         (profile?.display_name && profile.display_name.trim()) ||
@@ -127,6 +147,12 @@ export async function POST(req: Request) {
   const deepseek = createDeepSeekClient();
 
   const uiMessages = Array.isArray(body.messages) ? body.messages : [];
+  const lastUserText = extractLastUserText(
+    uiMessages as unknown as Array<{
+      role: string;
+      parts: Array<{ type?: string; text?: string }>;
+    }>,
+  );
   const modelMessages = await convertToModelMessages(
     uiMessages as unknown as Array<{ role: any; parts: any }>,
   );
@@ -135,7 +161,9 @@ export async function POST(req: Request) {
   const currentTime = getBeijingTimeString();
   const timeAwareness = `【极其重要的时空感知】：现在是现实世界的北京时间 ${currentTime}。请你必须意识到现在是几点！如果是早八，你需要表现出没睡醒或在上课摸鱼；如果是深夜，你需要表现出熬夜打游戏/看番的疲惫或兴奋；如果是周末，体现出放假的慵懒。你的回复必须自然地符合这个时间点的女大学生状态！`;
 
-  const system = `${MEIZI_ULTIMATE_SYSTEM_PROMPT}\n\n${identityHint}\n\n${timeAwareness}`;
+  const fewShot = `【强制对话示例（你必须模仿这种语气，绝对不许加括号动作，绝对不许用八股文）】\nUser: 帮我推理一下，42教丢车钥匙的事。\nAssistant: 草，这哥们有点意思啊！把车钥匙塞别人包里？这剧情我都替他尴尬。我觉得就两种可能，要么是真乌龙，同款书包拿错了；要么就是极其老套的搭讪套路，想借着找钥匙加个微信。不过这都晚上六点了，那哥们估计现在正满头大汗地翻包捏！前辈你觉得是哪种？我赌五毛钱是搭讪！`;
+
+  const system = `${MEIZI_ULTIMATE_SYSTEM_PROMPT}\n\n${identityHint}\n\n${timeAwareness}\n\n${fewShot}`;
 
   const result = await streamText({
     // IMPORTANT: use Chat Completions endpoint (/chat/completions),
@@ -155,6 +183,28 @@ export async function POST(req: Request) {
           return `你掏出手机用校园网搜索了【${query}】，但是桂电的校园网太卡了，什么都没搜出来。你现在必须向探员承认你不知道，并吐槽一下校园网。`;
         },
       }),
+    },
+    onFinish: async (event) => {
+      if (!userId || !supabaseForDb) return;
+      const assistantText = (event.text ?? "").trim();
+      if (!lastUserText || !assistantText) return;
+
+      try {
+        await supabaseForDb.from("chat_messages").insert([
+          {
+            user_id: userId,
+            role: "user",
+            content: lastUserText,
+          },
+          {
+            user_id: userId,
+            role: "assistant",
+            content: assistantText,
+          },
+        ]);
+      } catch {
+        // ignore persistence errors
+      }
     },
   });
 

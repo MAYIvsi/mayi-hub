@@ -16,12 +16,14 @@ type Props = {
   initialDisplayName: string | null;
   initialAvatarUrl: string | null;
   initialSteamId: string | null;
+  layout?: "page" | "modal";
 };
 
 export function ProfileClient({
   initialDisplayName,
   initialAvatarUrl,
   initialSteamId,
+  layout = "page",
 }: Props) {
   const router = useRouter();
 
@@ -179,43 +181,68 @@ export function ProfileClient({
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4">
-      <GlowContainer variant="pink" className="p-6">
-        <div className="text-xs font-black tracking-[0.28em] text-text-muted">
-          AGENT_PROFILE
-        </div>
-        <div className="mt-2 text-2xl font-black tracking-tight text-text-primary">
-          探员个人中心
-        </div>
-        <div className="mt-1 text-sm text-text-muted">
-          改档案别乱来捏…档案室是会记仇的（
-        </div>
-      </GlowContainer>
+    <div
+      className={cn(
+        layout === "modal"
+          ? "h-full w-full"
+          : "mx-auto w-full max-w-3xl space-y-4",
+      )}
+    >
+      {layout === "page" ? (
+        <GlowContainer variant="pink" className="p-6">
+          <div className="text-xs font-black tracking-[0.28em] text-text-muted">
+            档案资料
+          </div>
+          <div className="mt-2 text-2xl font-black tracking-tight text-text-primary">
+            探员个人中心
+          </div>
+          <div className="mt-1 text-sm text-text-muted">
+            改档案别乱来捏…档案室是会记仇的（
+          </div>
+        </GlowContainer>
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <GlowContainer variant="green" className="p-5">
+      <div
+        className={cn(
+          layout === "modal"
+            ? "grid h-full gap-4 lg:grid-cols-[1.1fr_1fr]"
+            : "grid gap-4 lg:grid-cols-2",
+        )}
+      >
+        <GlowContainer variant="green" className={cn(layout === "modal" ? "p-6" : "p-5")}>
           <div className="flex items-center justify-between">
             <div className="text-xs font-black tracking-[0.28em] text-text-muted">
-              AVATAR_UPLOAD
+              头像档案
             </div>
-            <div className="text-xs text-text-muted">上传你的档案头像</div>
+            <div className="text-xs text-text-muted">点击更换 · 自动裁切 1:1</div>
           </div>
 
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center gap-3">
+          <div className={cn("mt-5", layout === "modal" ? "space-y-5" : "space-y-3")}>
+            <div className={cn("flex items-center gap-4", layout === "modal" ? "justify-center" : "")}>
               <Avatar
                 variant="green"
                 avatarUrl={croppedPreviewUrl ?? avatarUrl ?? null}
-                className="h-14 w-14"
+                className={cn(layout === "modal" ? "h-40 w-40" : "h-14 w-14")}
               />
-              <div className="min-w-0">
-                <div className="text-sm font-black tracking-tight text-text-primary">
-                  头像预览
+              {layout === "modal" ? (
+                <div className="min-w-0">
+                  <div className="text-xs font-black tracking-[0.28em] text-text-muted">
+                    探员代号
+                  </div>
+                  <div className="mt-2 truncate text-2xl font-black tracking-tight text-text-primary">
+                    {displayName || "未命名探员"}
+                  </div>
                 </div>
-                <div className="text-xs text-text-muted">
-                  正方形裁切 · 圆形展示（1:1）
+              ) : (
+                <div className="min-w-0">
+                  <div className="text-sm font-black tracking-tight text-text-primary">
+                    头像预览
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    正方形裁切 · 圆形展示（1:1）
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <input
@@ -226,15 +253,22 @@ export function ProfileClient({
               onChange={(e) => onSelectFile(e.target.files?.[0] ?? null)}
             />
 
-            <Button variant="pink" type="button" onClick={openFilePicker}>
-              点击上传/更换头像
-            </Button>
+            <div className={cn(layout === "modal" ? "flex justify-center" : "")}>
+              <Button
+                variant="pink"
+                type="button"
+                onClick={openFilePicker}
+                className="whitespace-nowrap"
+              >
+                上传新头像
+              </Button>
+            </div>
           </div>
         </GlowContainer>
 
-        <GlowContainer variant="pink" className="p-5">
+        <GlowContainer variant="pink" className={cn(layout === "modal" ? "p-6" : "p-5")}>
           <div className="text-xs font-black tracking-[0.28em] text-text-muted">
-            FILE_FIELDS
+            身份识别
           </div>
 
           <div className="mt-4 space-y-3">
@@ -285,7 +319,7 @@ export function ProfileClient({
 
       <Modal
         open={cropOpen}
-        title="AVATAR_CROP (1:1)"
+        title="裁切头像（1:1）"
         onClose={() => setCropOpen(false)}
       >
         <div className="space-y-3">

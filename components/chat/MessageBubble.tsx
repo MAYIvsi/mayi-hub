@@ -1,5 +1,7 @@
 import { cn } from "@/lib/cn";
 import type { ChatMessage } from "@/types/chat";
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 
 type BubbleRole = "user" | "meizi";
 
@@ -30,7 +32,28 @@ export function MessageBubble({
               : "bg-bg-app/60 border-border-pink text-text-primary shadow-glow-pink",
           )}
         >
-          <div className="whitespace-pre-wrap">{content}</div>
+          {isUser ? (
+            <div className="whitespace-pre-wrap">{content}</div>
+          ) : (
+            <div
+              className={cn(
+                "text-text-primary",
+                "leading-relaxed",
+                "[&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0",
+                "[&>ul]:my-2 [&>ul]:list-disc [&>ul]:pl-5",
+                "[&>ol]:my-2 [&>ol]:list-decimal [&>ol]:pl-5",
+                "[&>blockquote]:my-2 [&>blockquote]:border-l-2 [&>blockquote]:border-border-green [&>blockquote]:pl-3 [&>blockquote]:text-text-muted",
+                "[&>pre]:my-2 [&>pre]:overflow-auto [&>pre]:rounded-xl [&>pre]:border [&>pre]:border-border-green/40 [&>pre]:bg-bg-surface/60 [&>pre]:p-3",
+                "[&>pre>code]:font-mono [&>code]:rounded [&>code]:bg-bg-surface/60 [&>code]:px-1 [&>code]:py-0.5 [&>code]:font-mono",
+                "[&_strong]:text-text-primary [&_strong]:font-black",
+                "[&_a]:text-accent-pink [&_a]:underline",
+              )}
+            >
+              <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+                {content}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
         {timestamp ? (
           <div className="text-xs text-text-muted">{timestamp}</div>

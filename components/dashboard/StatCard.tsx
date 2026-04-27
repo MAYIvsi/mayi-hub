@@ -1,6 +1,7 @@
 import { GlowContainer } from "@/components/ui/GlowContainer";
 import { Progress } from "@/components/ui/Progress";
 import { cn } from "@/lib/cn";
+import Link from "next/link";
 
 export function StatCard({
   label,
@@ -8,12 +9,14 @@ export function StatCard({
   unit,
   progress,
   accent = "green",
+  hint,
 }: {
   label: string;
   value: number | string;
   unit?: string;
   progress: number;
   accent?: "green" | "pink";
+  hint?: { label: string; href: string; accent?: "pink" | "green" };
 }) {
   const titleAccent =
     accent === "green" ? "text-accent-green" : "text-accent-pink";
@@ -49,6 +52,20 @@ export function StatCard({
       <div className="mt-4">
         <Progress value={progress} className="ring-1 ring-border-green/25" />
       </div>
+
+      {hint ? (
+        <div className="mt-3 text-xs">
+          <Link
+            href={hint.href}
+            className={cn(
+              "font-semibold underline underline-offset-4",
+              hint.accent === "green" ? "text-accent-green" : "text-accent-pink",
+            )}
+          >
+            {hint.label}
+          </Link>
+        </div>
+      ) : null}
     </GlowContainer>
   );
 }

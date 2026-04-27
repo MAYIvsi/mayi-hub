@@ -1,5 +1,6 @@
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { TypingIndicator } from "@/components/chat/TypingIndicator";
+import { useEffect, useRef } from "react";
 
 export function ChatThread({
   messages,
@@ -8,6 +9,12 @@ export function ChatThread({
   messages: { id: string; role: "user" | "meizi"; content: string; timestamp?: string }[];
   showTyping?: boolean;
 }) {
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, showTyping]);
+
   return (
     <div className="space-y-4">
       {messages.map((m) => (
@@ -19,6 +26,7 @@ export function ChatThread({
         />
       ))}
       {showTyping ? <TypingIndicator /> : null}
+      <div ref={endRef} />
     </div>
   );
 }

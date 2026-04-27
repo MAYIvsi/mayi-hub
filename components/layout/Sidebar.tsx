@@ -2,11 +2,11 @@ import {
   LayoutDashboard,
   MessageSquareText,
   FolderSearch,
-  UserRound,
 } from "lucide-react";
 
 import { MayiHubLogo } from "@/components/branding/MayiHubLogo";
 import { AgentIdentityCard } from "@/components/layout/AgentIdentityCard";
+import { ProfileDialog } from "@/components/layout/ProfileDialog";
 import { NavItem } from "@/components/layout/NavItem";
 import { cn } from "@/lib/cn";
 
@@ -23,6 +23,7 @@ export function Sidebar({
     total_attempts: number;
     display_name?: string | null;
     avatar_url?: string | null;
+    steam_id?: string | null;
   } | null;
 }) {
   return (
@@ -59,23 +60,24 @@ export function Sidebar({
             icon={<FolderSearch className="h-4 w-4 text-text-primary" />}
             glow="pink"
           />
-          <NavItem
-            href="/profile"
-            label="个人中心"
-            icon={<UserRound className="h-4 w-4 text-text-primary" />}
-            glow="pink"
-          />
         </div>
       </nav>
 
       <div className="mt-auto px-4 pb-5">
-        <AgentIdentityCard
-          emailPrefix={emailPrefix}
-          agentName={profile?.display_name ?? undefined}
-          role={profile?.role ?? null}
-          solvedCases={profile?.solved_cases ?? null}
-          totalAttempts={profile?.total_attempts ?? null}
-          avatarUrl={profile?.avatar_url ?? null}
+        <ProfileDialog
+          initialDisplayName={profile?.display_name ?? null}
+          initialAvatarUrl={profile?.avatar_url ?? null}
+          initialSteamId={profile?.steam_id ?? null}
+          trigger={
+            <AgentIdentityCard
+              emailPrefix={emailPrefix}
+              agentName={profile?.display_name ?? undefined}
+              role={profile?.role ?? null}
+              solvedCases={profile?.solved_cases ?? null}
+              totalAttempts={profile?.total_attempts ?? null}
+              avatarUrl={profile?.avatar_url ?? null}
+            />
+          }
         />
       </div>
     </aside>

@@ -7,6 +7,7 @@ export type DashboardStat = {
   unit?: string;
   progress: number;
   accent?: "green" | "pink";
+  hint?: { label: string; href: string; accent?: "pink" | "green" };
 };
 
 export function StatsGrid({ stats }: { stats: DashboardStat[] }) {
@@ -20,6 +21,7 @@ export function StatsGrid({ stats }: { stats: DashboardStat[] }) {
           unit={s.unit}
           progress={s.progress}
           accent={s.accent}
+          hint={s.hint}
         />
       ))}
     </div>

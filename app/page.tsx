@@ -6,10 +6,25 @@ import { WelcomeBanner } from "@/components/dashboard/WelcomeBanner";
 import { meiziTerminalFeed } from "@/data/meiziFeed";
 import { createClient } from "@/lib/supabase/server";
 import { getMyProfile } from "@/lib/supabase/profile";
+import { headers } from "next/headers";
 
 function pct(n: number, d: number) {
   if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((n / d) * 100)));
+}
+
+async function fetchSteamTotalHours(steamId: string) {
+  const h = await headers();
+  const host = h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  if (!host) throw new Error("missing host header");
+
+  const url = `${proto}://${host}/api/steam?steam_id=${encodeURIComponent(steamId)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`steam api ${res.status}`);
+  const json = (await res.json()) as { total_hours?: number };
+  if (typeof json.total_hours !== "number") throw new Error("bad steam payload");
+  return json.total_hours;
 }
 
 export default async function Home() {
@@ -21,6 +36,17 @@ export default async function Home() {
   const attempts = profile?.total_attempts ?? 0;
   const accuracy = attempts > 0 ? Math.round((solved / attempts) * 100) : 0;
 
+  const steamId = profile?.steam_id?.trim() || null;
+  let steamHours: number | null = null;
+  let steamError = false;
+  if (steamId) {
+    try {
+      steamHours = await fetchSteamTotalHours(steamId);
+    } catch {
+      steamError = true;
+    }
+  }
+
   const stats = [
     {
       key: "casesSolved",
@@ -31,12 +57,19 @@ export default async function Home() {
       accent: "green" as const,
     },
     {
-      key: "totalAttempts",
-      label: "挑战次数",
-      value: attempts,
-      unit: "次",
-      progress: pct(attempts, Math.max(1, solved + attempts)),
-      accent: "pink" as const,
+      key: "steamHours",
+      label: "Steam 摸鱼时长",
+      value:
+        steamHours != null
+          ? steamHours
+          : "未绑定或隐私受限",
+      unit: steamHours != null ? "h" : "",
+      progress: steamHours != null ? Math.max(1, Math.min(100, Math.round((steamHours / 3000) * 100))) : 0,
+      accent: steamHours != null ? ("green" as const) : ("pink" as const),
+      hint:
+        steamHours == null
+          ? { label: "去绑定 →", href: "/profile", accent: "pink" as const }
+          : undefined,
     },
     {
       key: "accuracy",
@@ -86,6 +119,17 @@ export default async function Home() {
                 body: `solved_cases=${solved} · total_attempts=${attempts}`,
                 tag: "SYNC",
               },
+              ...(steamId
+                ? [
+                    {
+                      title: "Steam 连线",
+                      body: steamError
+                        ? "Steam API 暂时拉不下来数据（可能网络/隐私/ID 错误）"
+                        : `steam_id=${steamId} · total_hours=${steamHours ?? "?"}`,
+                      tag: "STEAM",
+                    },
+                  ]
+                : []),
             ]}
           />
           <MeiziTerminalFeed lines={meiziTerminalFeed} />
