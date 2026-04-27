@@ -21,7 +21,11 @@ export async function middleware(req: NextRequest) {
   });
 
   const pathname = req.nextUrl.pathname;
-  const isProtected = pathname === "/puzzles" || pathname.startsWith("/puzzles/");
+  const isProtected =
+    pathname === "/puzzles" ||
+    pathname.startsWith("/puzzles/") ||
+    pathname === "/profile" ||
+    pathname.startsWith("/profile/");
 
   if (isProtected) {
     const { data } = await supabase.auth.getUser();
@@ -37,6 +41,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/puzzles/:path*"],
+  matcher: ["/puzzles/:path*", "/profile/:path*"],
 };
 

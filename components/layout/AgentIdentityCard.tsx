@@ -11,6 +11,7 @@ export function AgentIdentityCard({
   role,
   solvedCases,
   totalAttempts,
+  avatarUrl,
 }: {
   className?: string;
   agentName?: string;
@@ -19,6 +20,7 @@ export function AgentIdentityCard({
   role?: "admin" | "agent" | null;
   solvedCases?: number | null;
   totalAttempts?: number | null;
+  avatarUrl?: string | null;
 }) {
   const authed = Boolean(emailPrefix);
   const solved = typeof solvedCases === "number" ? solvedCases : null;
@@ -33,7 +35,7 @@ export function AgentIdentityCard({
       )}
     >
       <div className="flex items-center gap-3">
-        <Avatar variant={authed ? "green" : "pink"} />
+        <Avatar variant={authed ? "green" : "pink"} avatarUrl={avatarUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <div className="truncate text-sm font-black tracking-wider text-text-primary">

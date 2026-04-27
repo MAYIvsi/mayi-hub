@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MAYI Hub",
-  description: "Cyber-Subculture detective hub for MAYI.",
+  title: "梅子侦探事务所",
+  description: "Meizi Detective Agency.",
 };
 
 export default function RootLayout({
