@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   MessageSquareText,
   FolderSearch,
+  Gamepad2,
 } from "lucide-react";
 
 import { MayiHubLogo } from "@/components/branding/MayiHubLogo";
@@ -59,6 +60,12 @@ export function Sidebar({
             label="机密档案"
             icon={<FolderSearch className="h-4 w-4 text-text-primary" />}
             glow="pink"
+          />
+          <NavItem
+            href="/arcade"
+            label="娱乐室"
+            icon={<Gamepad2 className="h-4 w-4 text-text-primary" />}
+            glow="green"
           />
         </div>
       </nav>
