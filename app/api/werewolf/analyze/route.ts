@@ -45,7 +45,6 @@ export async function POST(req: Request) {
   });
 
   // Prefer plain text streaming response for easy frontend consumption.
-  // @ts-expect-error - ai sdk provides this helper in supported versions.
   if (typeof (result as any).toTextStreamResponse === "function") {
     return (result as any).toTextStreamResponse();
   }
